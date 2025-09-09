@@ -1,6 +1,5 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView, TokenObtainPairView
-
 from user.views import CreateUserView, ManageUserView
 
 app_name = "user"

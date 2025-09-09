@@ -9,6 +9,7 @@ from cinema.serializers import MovieListSerializer, MovieDetailSerializer
 
 MOVIE_URL = reverse("cinema:movie-list")
 
+
 def sample_movie(**params):
     defaults = {
         "title": "Test Movie",
@@ -17,7 +18,6 @@ def sample_movie(**params):
     }
     defaults.update(params)
     return Movie.objects.create(**defaults)
-
 
 
 def sample_genre(name="Action"):
@@ -100,14 +100,14 @@ class AuthenticateMovieApiTest(TestCase):
         self.assertEqual(res.data[0]["title"], "Inception")
 
     def test_retrieve_movie(self):
-         movie = sample_movie()
-         movie.genres.add(sample_genre())
-         movie.actors.add(sample_actor())
+        movie = sample_movie()
+        movie.genres.add(sample_genre())
+        movie.actors.add(sample_actor())
 
-         url = reverse("cinema:movie-detail", args=[movie.id])
-         res = self.client.get(url)
+        url = reverse("cinema:movie-detail", args=[movie.id])
+        res = self.client.get(url)
 
-         serializer = MovieDetailSerializer(movie)
+        serializer = MovieDetailSerializer(movie)
 
-         self.assertEqual(res.status_code, status.HTTP_200_OK)
-         self.assertEqual(res.data, serializer.data)
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data, serializer.data)

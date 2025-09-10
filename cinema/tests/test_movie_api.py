@@ -3,7 +3,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.reverse import reverse
 from rest_framework.test import APIClient
-
+from PIL import Image
+import tempfile
 from cinema.models import Movie, Actor, Genre
 from cinema.serializers import MovieListSerializer, MovieDetailSerializer
 
@@ -45,7 +46,13 @@ class AuthenticateMovieApiTest(TestCase):
         self.user = get_user_model().objects.create_user(
             email="test@test.test", password="testpassword"
         )
-        self.client.force_authenticate(self.user)
+        token_res = self.client.post(
+            reverse("user:token_obtain_pair"),  # <-- namespace "user:"
+            {"email": "test@test.test", "password": "testpassword"},
+        )
+        self.assertEqual(token_res.status_code, status.HTTP_200_OK)
+        token = token_res.data["access"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     def test_movies_list(self):
         movie = sample_movie()
@@ -54,7 +61,7 @@ class AuthenticateMovieApiTest(TestCase):
 
         res = self.client.get(MOVIE_URL)
 
-        movies = Movie.objects.all().prefetch_related("genres", "actors")
+        movies = Movie.objects.all().prefetch_related("genres", "actors").distinct()
         serializer = MovieListSerializer(movies, many=True)
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -111,3 +118,43 @@ class AuthenticateMovieApiTest(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(res.data, serializer.data)
+
+    def test_invalid_genres_param_raises_validation(self):
+        res = self.client.get(MOVIE_URL, {"genres": "abc,xyz"})
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class MovieImageUploadTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            email="admin.user@cinema.com", password="1qazcde3"
+        )
+        self.user = get_user_model().objects.create_user(
+            email="user@example.com", password="password123"
+        )
+
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(self.admin)
+
+        self.user_client = APIClient()
+        self.user_client.force_authenticate(self.user)
+
+    def _make_image_file(self):
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg")
+        Image.new("RGB", (200, 200)).save(tmp, format="JPEG")
+        tmp.seek(0)
+        return tmp
+
+    def test_admin_can_upload_image(self):
+        movie = sample_movie(title="With Image")
+        url = reverse("cinema:movie-upload-image", args=[movie.id])
+        with self._make_image_file() as img:
+            res = self.admin_client.post(url, {"image": img}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+
+    def test_non_admin_cannot_upload_image(self):
+        movie = sample_movie(title="No Image")
+        url = reverse("cinema:movie-upload-image", args=[movie.id])
+        with self._make_image_file() as img:
+            res = self.user_client.post(url, {"image": img}, format="multipart")
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
